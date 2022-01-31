@@ -8,3 +8,4 @@ edition = "2021"
 [dependencies]
 rust-ini="0.17"
 thiserror="*"
+flate2="*"
