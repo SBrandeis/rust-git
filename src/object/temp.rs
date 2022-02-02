@@ -1,6 +1,7 @@
 use super::*;
 
 pub trait Serializable {
+    const obj_type: &'static str;
     fn serialize(&self) -> &[u8];
 
     fn deserialize(data: &[u8]) -> Self;
@@ -26,6 +27,8 @@ impl From<TreeObject> for GitObject {
 }
 
 impl Serializable for TreeObject {
+    const obj_type: &'static str = "tree";
+
     fn serialize(&self) -> &[u8] {
         unimplemented!()
     }
@@ -49,6 +52,7 @@ impl From<BlobObject> for GitObject {
 }
 
 impl Serializable for BlobObject {
+    const obj_type: &'static str = "blob";
     fn serialize(&self) -> &[u8] {
         unimplemented!()
     }
@@ -72,6 +76,7 @@ impl From<CommitObject> for GitObject {
 }
 
 impl Serializable for CommitObject {
+    const obj_type: &'static str = "commit";
     fn serialize(&self) -> &[u8] {
         unimplemented!()
     }
@@ -95,6 +100,7 @@ impl From<TagObject> for GitObject {
 }
 
 impl Serializable for TagObject {
+    const obj_type: &'static str = "tag";
     fn serialize(&self) -> &[u8] {
         unimplemented!()
     }

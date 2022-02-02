@@ -14,7 +14,7 @@ use flate2::read::ZlibDecoder;
 use ini::Ini;
 use thiserror::Error;
 
-use object::{BlobObject, CommitObject, GitObject, Serializable, TagObject, TreeObject};
+use object::{BlobObject, CommitObject, Object, Serializable, TagObject, TreeObject};
 
 const DEFAULT_DESCRIPTION: &str =
     "Unnamed repository; edit this file 'description' to name the repository.\n";
@@ -107,14 +107,14 @@ impl Repository {
         }
     }
 
-    pub fn object_read(
+    pub fn object_read<Hash: AsRef<str> + Clone>(
         &self,
-        sha: &impl AsRef<str>,
-    ) -> Result<Option<object::GitObject>, ReadObjectError> {
+        hash: Hash,
+    ) -> Result<Option<Object>, ReadObjectError> {
         let path2obj = self.git_dir.join(format!(
             "objects/{0}/{1}",
-            &sha.as_ref()[0..2],
-            &sha.as_ref()[2..],
+            &hash.as_ref()[0..2],
+            &hash.as_ref()[2..],
         ));
         println!("{:?}", path2obj);
         let mut deflated_reader = match fs::File::open(path2obj) {
@@ -137,17 +137,17 @@ impl Repository {
         println!("obj_size: {:02x?}", obj_size);
 
         let obj_type = String::from_utf8(obj_type).or(Err(ReadObjectError::InvalidObject(
-            format!("Could not parse object type for {0}", &sha.as_ref()),
+            format!("Could not parse object type for {0}", &hash.as_ref()),
         )))?;
         let obj_size: usize = String::from_utf8(obj_size)
             .or(Err(ReadObjectError::InvalidObject(format!(
                 "Could not parse object type for ${0}",
-                &sha.as_ref()
+                hash.as_ref()
             ))))?
             .parse()
             .or(Err(ReadObjectError::InvalidObject(format!(
                 "Could not parse object type for ${0}",
-                &sha.as_ref()
+                hash.as_ref()
             ))))?;
 
         let mut obj_content: Vec<u8> = Vec::with_capacity(obj_size);
@@ -156,7 +156,7 @@ impl Repository {
             return Err(ReadObjectError::InvalidObject("Size mismatch".to_owned()));
         }
 
-        let git_obj: GitObject = match obj_type.as_str() {
+        let git_obj: Object = match obj_type.as_str() {
             "commit" => CommitObject::deserialize(&obj_content).into(),
             "blob" => BlobObject::deserialize(&obj_content).into(),
             "tree" => TreeObject::deserialize(&obj_content).into(),
