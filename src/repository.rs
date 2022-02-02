@@ -1,8 +1,11 @@
 extern crate flate2;
+extern crate hex;
 extern crate ini;
+extern crate sha1;
 
 use super::*;
 
+use std::borrow::Cow;
 use std::fmt;
 use std::fs;
 use std::io;
@@ -10,8 +13,9 @@ use std::io::prelude::*;
 use std::io::BufReader;
 use std::path::{Path, PathBuf};
 
-use flate2::read::ZlibDecoder;
+use flate2::{read::ZlibDecoder, write::ZlibEncoder, Compression};
 use ini::Ini;
+use sha1::{Digest, Sha1};
 use thiserror::Error;
 
 use object::{BlobObject, CommitObject, Object, Serializable, TagObject, TreeObject};
@@ -170,6 +174,51 @@ impl Repository {
         };
         Ok(Some(git_obj))
     }
+
+    /// Name resolution func
+    /// TODO: implement it
+    pub fn object_resolve<'a, Hash: AsRef<str> + Clone>(
+        &self,
+        name: &'a Hash,
+        fmt: Option<()>,
+        follow: Option<bool>,
+    ) -> Cow<'a, Hash> {
+        Cow::Borrowed(name)
+    }
+
+    pub fn object_write(
+        &self,
+        obj: Object,
+        do_write: bool,
+    ) -> Result<impl AsRef<str> + Clone, WriteObjectError> {
+        let obj_data = Vec::<u8>::from(obj.serialize());
+
+        let mut obj_content = Vec::<u8>::with_capacity(obj_data.len() + 40);
+
+        obj_content.extend(obj.get_type().as_bytes());
+        obj_content.push(0x20);
+        obj_content.extend(obj_data.len().to_string().as_bytes());
+        obj_content.push(0x00);
+        obj_content.extend(obj_data);
+
+        let hash = hex::encode(Sha1::digest(&obj_content));
+
+        if do_write {
+            let path2obj = self
+                .git_dir
+                .join(format!("objects/{0}/{1}", &hash[0..2], &hash[2..],));
+            if let Some(parent) = path2obj.parent() {
+                if !parent.is_dir() {
+                    fs::create_dir(parent)?;
+                }
+            }
+            let mut out_file =
+                ZlibEncoder::new(fs::File::create(path2obj)?, Compression::default());
+            out_file.write_all(obj_content.as_slice())?;
+        }
+
+        Ok(hash)
+    }
 }
 
 #[derive(Error, Debug)]
@@ -202,6 +251,12 @@ pub enum ReadObjectError {
     IOError(#[from] io::Error),
     #[error("Invalid object: `${0}`")]
     InvalidObject(String),
+}
+
+#[derive(Error, Debug)]
+pub enum WriteObjectError {
+    #[error("io error")]
+    IOError(#[from] io::Error),
 }
 
 pub mod config {
