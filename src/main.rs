@@ -1,15 +1,26 @@
+extern crate clap;
+
+use clap::Parser;
+
+pub mod commands;
 pub mod object;
 pub mod repository;
+use std::error::Error;
+use std::process;
+use commands::Command;
 
-use std::convert::AsRef;
+#[derive(Parser)]
+#[clap(author, version, about, long_about = None)]
+pub struct Cli {
+    #[clap(subcommand)]
+    pub command: commands::Commands
+}
 
-fn main() {
-    let repo = repository::Repository::find_parent(".").unwrap().unwrap();
-    println!("Repo: {:?}", repo);
 
-    let obj = repo
-        .object_read(&"4b825dc642cb6eb9a060e54bf8d69288fbee4904")
-        .unwrap()
-        .unwrap();
-    println!("Empty tree: {:?}", obj);
+fn main() -> Result<(), Box<dyn Error>> {
+    let args = Cli::parse();
+    let rc = match args.command {
+        commands::Commands::CatFile(command) => command.exec()?,
+    };
+    process::exit(rc as i32);
 }

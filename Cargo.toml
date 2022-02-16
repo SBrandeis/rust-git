@@ -11,3 +11,4 @@ thiserror="*"
 flate2="*"
 sha1="*"
 hex="*"
+clap={ version = "*", features = ["derive"] }
