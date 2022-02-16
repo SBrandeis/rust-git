@@ -22,7 +22,12 @@ impl super::Command for CatFileCommand {
         let cwd = env::current_dir()?;
         if let Some(repo) = Repository::find_parent(cwd)? {
             let obj_data = cat_file(&repo, &self.r#type, &self.id)?;
-            stdout().write_all(&obj_data)?;
+            println!(
+                "{}",
+                &obj_data.into_iter()
+                    .map(|byte| byte as char)
+                    .collect::<String>()
+            );
         } else {
             eprintln!("Not in a Git Repository");
             return Ok(1);
