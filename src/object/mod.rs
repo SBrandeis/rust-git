@@ -1,3 +1,6 @@
+use thiserror::Error;
+use std::fmt;
+
 pub mod blob;
 pub mod commit;
 pub mod tag;
@@ -9,11 +12,41 @@ pub use commit::CommitObject;
 pub use tag::TagObject;
 pub use tree::TreeObject;
 
-pub trait Serializable {
-    fn serialize(&self) -> &[u8];
-    fn deserialize(data: &[u8]) -> Self;
+#[derive(Debug)]
+pub enum ObjectType {
+    Tree,
+    Blob,
+    Commit,
+    Tag,
 }
 
+#[derive(Error, Debug)]
+pub struct InvalidObjectError(String);
+
+impl From<InvalidObjectError> for String {
+    fn from(error: InvalidObjectError) -> String {
+        return error.0
+    }
+}
+
+impl fmt::Display for InvalidObjectError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+impl TryFrom<&str> for ObjectType {
+    type Error = InvalidObjectError;
+
+    fn try_from(value: &str) -> Result<ObjectType, Self::Error> {
+        match value {
+            "tree" => Ok(ObjectType::Tree),
+            "blob" => Ok(ObjectType::Blob),
+            "commit" => Ok(ObjectType::Commit),
+            "tag" => Ok(ObjectType::Tag),
+            _ => Err(InvalidObjectError(format!("Unknown object type {}", value)))
+        }
+    }
+}
 pub trait GitObject {
     const TYPE: &'static str;
 }
@@ -26,18 +59,14 @@ pub enum Object {
     Tag(tag::TagObject),
 }
 
-impl Serializable for Object {
-    fn serialize(&self) -> &[u8] {
-        match self {
-            Object::Tree(t) => t.serialize(),
-            Object::Blob(b) => b.serialize(),
-            Object::Commit(c) => c.serialize(),
-            Object::Tag(t) => t.serialize(),
+impl From<Object> for Vec<u8> {
+    fn from(object: Object) -> Vec<u8> {
+        match object {
+            Object::Tree(t) => t.into(),
+            Object::Blob(b) => b.into(),
+            Object::Commit(c) => c.into(),
+            Object::Tag(t) => t.into(),
         }
-    }
-
-    fn deserialize(data: &[u8]) -> Self {
-        unimplemented!();
     }
 }
 

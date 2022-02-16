@@ -18,7 +18,7 @@ use ini::Ini;
 use sha1::{Digest, Sha1};
 use thiserror::Error;
 
-use object::{BlobObject, CommitObject, Object, Serializable, TagObject, TreeObject};
+use object::{BlobObject, CommitObject, Object, TagObject, TreeObject, InvalidObjectError};
 
 const DEFAULT_DESCRIPTION: &str =
     "Unnamed repository; edit this file 'description' to name the repository.\n";
@@ -111,16 +111,15 @@ impl Repository {
         }
     }
 
-    pub fn object_read<Hash: AsRef<str> + Clone>(
+    pub fn object_read(
         &self,
-        hash: Hash,
+        hash: impl AsRef<str>,
     ) -> Result<Option<Object>, ReadObjectError> {
         let path2obj = self.git_dir.join(format!(
             "objects/{0}/{1}",
             &hash.as_ref()[0..2],
             &hash.as_ref()[2..],
         ));
-        println!("{:?}", path2obj);
         let mut deflated_reader = match fs::File::open(path2obj) {
             Err(err) => match err.kind() {
                 io::ErrorKind::NotFound => return Ok(None),
@@ -136,9 +135,6 @@ impl Repository {
         obj_type.pop();
         obj_size.pop();
         // ^^ TODO: make this cleaner - maybe with .split().next() or smth ?
-
-        println!("obj_type: {:02x?}", obj_type);
-        println!("obj_size: {:02x?}", obj_size);
 
         let obj_type = String::from_utf8(obj_type).or(Err(ReadObjectError::InvalidObject(
             format!("Could not parse object type for {0}", &hash.as_ref()),
@@ -160,11 +156,13 @@ impl Repository {
             return Err(ReadObjectError::InvalidObject("Size mismatch".to_owned()));
         }
 
+        let commit = CommitObject::try_from(&obj_content[..]);
+
         let git_obj: Object = match obj_type.as_str() {
-            "commit" => CommitObject::deserialize(&obj_content).into(),
-            "blob" => BlobObject::deserialize(&obj_content).into(),
-            "tree" => TreeObject::deserialize(&obj_content).into(),
-            "tag" => TagObject::deserialize(&obj_content).into(),
+            "commit" => CommitObject::try_from(obj_content)?.into(),
+            "blob" => BlobObject::try_from(obj_content)?.into(),
+            "tree" => TreeObject::try_from(obj_content)?.into(),
+            "tag" => TagObject::try_from(obj_content)?.into(),
             t => {
                 return Err(ReadObjectError::InvalidObject(format!(
                     "Unknown object type: `${0}`",
@@ -177,25 +175,26 @@ impl Repository {
 
     /// Name resolution func
     /// TODO: implement it
-    pub fn object_resolve<'a, Hash: AsRef<str> + Clone>(
+    pub fn object_resolve<'a>(
         &self,
-        name: &'a Hash,
+        obj_id: &'a impl AsRef<str>,
         fmt: Option<()>,
         follow: Option<bool>,
-    ) -> Cow<'a, Hash> {
-        Cow::Borrowed(name)
+    ) -> Cow<'a, str> {
+        obj_id.as_ref().into()
     }
 
     pub fn object_write(
         &self,
         obj: Object,
         do_write: bool,
-    ) -> Result<impl AsRef<str> + Clone, WriteObjectError> {
-        let obj_data = Vec::<u8>::from(obj.serialize());
+    ) -> Result<impl AsRef<str>, WriteObjectError> {
+        let obj_type = obj.get_type().as_bytes();
+        let obj_data = Vec::<u8>::from(obj);
 
         let mut obj_content = Vec::<u8>::with_capacity(obj_data.len() + 40);
 
-        obj_content.extend(obj.get_type().as_bytes());
+        obj_content.extend(obj_type);
         obj_content.push(0x20);
         obj_content.extend(obj_data.len().to_string().as_bytes());
         obj_content.push(0x00);
@@ -251,6 +250,12 @@ pub enum ReadObjectError {
     IOError(#[from] io::Error),
     #[error("Invalid object: `${0}`")]
     InvalidObject(String),
+}
+
+impl From<InvalidObjectError> for ReadObjectError {
+    fn from(error: InvalidObjectError) -> ReadObjectError {
+        ReadObjectError::InvalidObject(String::from(error))
+    }
 }
 
 #[derive(Error, Debug)]
